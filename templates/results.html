@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<head>
+    <title>Search Results</title>
+</head>
+<body>
+    <h1>Uncork Your Curiosity</h1>
+    <form method="POST">
+        <input type="text" name="query" placeholder="Search here">
+        <button type="submit">Search</button>
+    </form>
+
+    <h3>Search Results</h3>
+    <ul>
+        {% for link in links %}
+        <li><a href="{{ link }}" target="_blank">{{ link }}</a></li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

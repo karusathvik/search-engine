@@ -1,0 +1,231 @@
+import json
+import os
+from pathlib import Path
+import shelve
+from simhash import Simhash
+from alternate_parser import Parser
+import hashlib
+from math import log
+import pickle
+# add anchor text to document its pointing to
+
+'''
+Done:
+
+STRUCTURE:
+Url Hash Table: //shelf for now
+UrlHash -> (Url, incoming urls count)
+
+INVERTED INDEX: //bin for now
+Term -> (HashedUrl, Frequency)
+
+ToDo:
+AnchorText Index:
+
+Positioning index:
+
+'''
+
+
+class Indexer:
+    doc_id = 0
+    dump_id = 0
+    total_count = 0
+
+    def __init__(self, target_directory):
+        self.url_count = 0
+        self.index = {}
+        self.stored_simhash = False
+
+        self.weights = [5, 4, 3, 2, 1]
+        # title, h1, h2, h3, strong
+
+        # when you run your first fresh index
+        if not os.path.exists('stored_urls_path.json'):
+            self.simhash = {}  # ik not efficent for now but just stores unique simhashes
+        else:
+            self.stored_simhash = True
+            json_stored_path = open('stored_urls_path.json', 'r')
+            self.simhash = json.load(json_stored_path)  # loaded simhash
+
+        self.url_id = dict()#shelve.open('url_id.shelve')  # dict()
+        self.fill_index_with_content(target_directory)
+
+        if self.stored_simhash:
+            json_stored_path.close()
+        else:
+            with open('stored_urls_path.json', 'w') as js:
+                json.dump(self.simhash, js)
+
+        print("saving url id")
+        self._save_url_id()
+
+    def dump_current_index(self):
+        print(f'dumping {Indexer.dump_id}')
+        os.makedirs("dump", exist_ok=True)
+        json_dump = f'dump/index{Indexer.dump_id}.jsonl'
+        self.index = dict(sorted(self.index.items()))
+        with open(json_dump, 'w') as dump:
+            for key, value in self.index.items():
+                json.dump({key: value}, dump)
+                dump.write('\n')
+        self.url_count = 0
+        self.index = dict()
+        Indexer.dump_id += 1
+
+    def fill_index_with_content(self, target_directory):
+        base = Path(target_directory)
+        for subdir in base.iterdir():  # each worker will work only with one and dump
+            if subdir.is_dir():
+                for file in subdir.iterdir():
+                    self.url_count += 1
+                    Indexer.total_count += 1
+                    content = Parser().parse_content(file)
+                    if content:
+                        url, tokens, anchor_dict, fields = content
+                        print(f'parsing {Indexer.total_count}: {file} {url}')
+                        if not self.similar_exist(tokens):
+                            # this is used for calculating tf
+                            doc_size = len(tokens)
+                            url_hash = hashlib.sha256(url.encode()).hexdigest()
+                            self.add_posting_token(
+                                tokens, url_hash, doc_size, fields)
+                            self.add_anchor_text(url, url_hash, anchor_dict)
+                        if self.url_count > 10000:
+                            self.dump_current_index()  # dumps the current index
+        self.dump_current_index()
+
+    def add_anchor_text(self, url, url_hash, anchor_dict):
+        # anchor_dict {urlhashes : words} so matches urls found in page to the words used to describe them
+        string_url_hash = str(url_hash)
+        if string_url_hash not in self.url_id:
+            self.url_id[string_url_hash] = [
+                url, set(), set(anchor_dict.keys()), 0]
+            # [url, pages anchor words (found in other pages),  outgoing links, number of outgoing links]
+            # title, h1, h2, h3, strong
+
+        else:  # if its in self.url_id already
+            # updating url, fields data and outlink pages of the placeholder entry
+            self.url_id[url_hash][0] = url
+            # adds urls that this site points to
+            self.url_id[url_hash][2] = set(anchor_dict.keys())
+
+        for key in anchor_dict:
+            if key in self.url_id:
+                #updating anchor text of the existing entry
+                self.url_id[key][1].update(anchor_dict[key])
+            else:
+                #creating placeholder entry for not indexed page but was found on a hyperlink
+                self.url_id[key] = [None, anchor_dict[key], None, 0]
+
+    def add_posting_token(self, tokens, url_hash, doc_size, fields):
+        '''just adds the token count and the hashed url <hashedurl, tf or occurences / total # terms >'''
+        count = dict()
+        bigram_count = dict()  # To track bigram frequency
+        weighted = dict()
+        # print(f'FIELDS : {fields}')
+
+        # get weight associated with field
+        #print(f'full fields {fields}')
+        for index, tokens_in_field in enumerate(fields):
+            weight = self.weights[index]
+        #    print(f'field {index}')
+            for token in tokens_in_field:
+                weighted[token] = weight
+
+        for token in tokens:
+            if token not in count:
+                count[token] = 1
+            else:
+                count[token] += 1
+
+        scorings = self.calculate_some_relevance(weighted, doc_size, count)
+
+        for key in count:
+            if key not in self.index:
+            #    print(f'SCORINGS {key}: {scorings[key]}')
+                self.index[key] = [(url_hash, scorings[key])]
+            else:
+                self.index[key].append((url_hash,  scorings[key]))
+
+        # counts term frequencies for each word in the bigram
+        for i in range(len(tokens) - 1):
+            bigram = tokens[i] + " " + tokens[i + 1]
+            if bigram not in bigram_count:
+                bigram_count[bigram] = 1
+            else:
+                bigram_count[bigram] += 1
+
+        # print(f'SCORINGS {scorings}')
+        for key, value in bigram_count.items():
+            split_key = key.split(' ')
+            # print(f'KEY {key}')
+            # print(
+            #     f' score of {key} : {(scorings[split_key[0]] + scorings[split_key[1]]) / 2}')
+            #print(
+            #    f'SCORINGS {key}: {(scorings[split_key[0]] + scorings[split_key[1]]) / 2}')
+            if key not in self.index:
+                self.index[key] = [
+                    (url_hash,  bigram_count[key] * (scorings[split_key[0]] + scorings[split_key[1]]) / 2)]
+            else:
+                self.index[key].append(
+                    (url_hash,  bigram_count[key] * (scorings[split_key[0]] + scorings[split_key[1]]) / 2))
+
+    def calculate_some_relevance(self, weighted_content, doc_size, tf_content):
+        FIELD_WAIT_RATIO = 0.65
+        TF_RATIO = 0.35
+        final_token_weight = {}
+        for k, tf in tf_content.items():
+            weight = weighted_content.get(k, 0)
+            if weight == 0:
+                weighted_tf = (1 + log(tf)) if tf > 0 else 0
+            else:
+                weighted_tf = FIELD_WAIT_RATIO * (1 + log(weight)) * TF_RATIO *\
+                    (1 + log(tf)) if tf > 0 else 0
+            final_token_weight[k] = weighted_tf
+        return final_token_weight
+
+    def similar_exist(self, tokens):  # have to change url_id later
+        '''checks the simhash values and returns if a similar exits value exists or not'''
+
+        try:
+            simhash = self._get_simhash(tokens)
+            sim_val = simhash.value
+
+            # this is the part where we just check if this was one of the valid simhashes we encountered before
+            if self.stored_simhash:
+                if str(sim_val) in self.simhash:
+                    return False
+                else:
+                    return True
+
+            if not self.simhash:
+                self.simhash[str(sim_val)] = 0
+                return False
+            else:
+                for simhash_val in self.simhash:
+                    value = Simhash(int(simhash_val))
+                    if simhash.distance(value) <= 2:
+                        print("Similar detected for the above url")
+                        return True
+
+            self.simhash[str(sim_val)] = 0
+            return False
+        except:
+            print("overflow error")
+            return False
+
+    def _get_simhash(self, tokens):
+        shortened_tokens = [token[:30] if len(
+            token) > 30 else token for token in tokens]
+        return Simhash(" ".join(shortened_tokens[:150]))
+    
+    def _save_url_id(self):
+        with shelve.open('url_id.shelve') as f:
+            for key, value in self.url_id.items():
+                if value[0]:
+                    f[key] = value
+
+
+if __name__ == "__main__":
+    a = Indexer("DEV")
