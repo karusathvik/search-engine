@@ -58,11 +58,10 @@ class Query:
                 lookup = self.lookup_word(parsed_query[0])
 
             sort_time = time.time()
-            sorted_lookup = sorted(
-                lookup, key=lambda x: x[1] * log(55393 / len(lookup)), reverse=True)
+
             end_time = time.time()
             # print(f'time to sort {end_time - sort_time}')
-            self.print_first_10_pages(sorted_lookup)
+            self.print_first_10_pages(lookup)
 
             end_time = time.time()
             elapsed_time = end_time - start_time  # Calculate elapsed time
@@ -89,6 +88,7 @@ class Query:
 
             top_10 = heapq.nlargest(
                 10, common_docs.items(), key=lambda x: x[1])
+
 
             self.print_first_10_pages(top_10)
             end_time = time.time()  # End the timer

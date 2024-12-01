@@ -27,7 +27,6 @@ def calculate_pagerank():
 
     # Iterate for PageRank calculation
     for iteration in range(500):  # Iterate at most 100 times
-        print(f"Iteration {iteration}")
         new_ranks = dict()
         dangling_rank_sum = sum(ranks[page] for page in pages if not outlinks_dict[page])
         #accounts for pageranks added by dangling nodes
@@ -35,15 +34,10 @@ def calculate_pagerank():
         total = len(pages)
 
         for page in pages:
-            start_time = time.time()
-            print(f"{count} out of {total}")
-
             rank_sum = sum(ranks[other_page] / len(outlinks_dict[other_page]) for other_page in incoming_links[page])
             new_ranks[page] = (1 - d) / N + d * (rank_sum + dangling_rank_sum / N)
 
             count += 1
-            end_time = time.time()
-            print(f"Page {count} done in {end_time - start_time} sec")
 
         # if change in all the pageranks are small enough, stop iteration
         if max(abs(new_ranks[page] - ranks[page]) for page in pages) < 1e-6:
@@ -52,12 +46,21 @@ def calculate_pagerank():
 
         ranks = new_ranks
 
+    #these are precomputed
+    min = 1.1728017378631037e-05
+    big = 0.008724411736476662
+    diff = big - min
+
     with shelve.open('url_id.shelve') as url_id:
         for key, value in ranks.items():
             data = url_id[key]
-            data[3] = value
+            data[3] = (value-min)/diff
+            '''
+            #this is for anchor set, so we remove the bad anchor set values
+            if data[1] and any(word in data[1] for word in ['read', 'next', 'previou', 'post', 'home']):
+                data[1] = set()
+            '''
             url_id[key] = data
-            #print(value)
 
 if __name__ == "__main__":
     calculate_pagerank()

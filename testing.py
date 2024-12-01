@@ -1,17 +1,24 @@
 import json
 from math import log
+import shelve
+
+count = 0
+min = 100000000
+max = -100000000000
+diff = max-min
+vals = set()
 
 
 
-with open('bins/bin_a.jsonl', 'r') as file:
-    for line in file:
-        data = json.loads(line.strip())
-        for term in data.values():
-            size = len(term)+1
-            for t in term:
-                t[1] *= log(20000/size)
-        sorted_data = sorted(term, key=lambda x: x[1], reverse = True)
-        break
+with shelve.open("url_id.shelve", writeback=True) as s:
+    for key, values in s.items():
+        vals.add(0.4+values[3]*0.3)
+
+
 
 # Print or use the collected data
 
+print(count)
+print(sorted(vals))
+print(min)
+print(max)
