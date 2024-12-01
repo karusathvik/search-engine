@@ -7,13 +7,9 @@ import copy
 import time
 import json
 import heapq
-from functools import lru_cache
-import cProfile
-import pstats
 from math import log
 
-# testing
-
+#TODO: fix bigram/normal word looks up for those that do not exist
 
 class Query:
     def __init__(self):
@@ -79,26 +75,21 @@ class Query:
             run = 0
 
             for bigram in all_bigrams:
-                print(bigram)
                 content = self.lookup_word(' '.join(bigram))
-                # print(content)
                 if run == 0:
-                    common_doc_set = {
-                        url_hash for url_hash, score in content}
+                    for posting in content:
+                        common_docs[posting[0]] = posting[1]
                     run += 1
                 else:
-                    common_doc_set = common_doc_set.intersection({
-                        url_hash for url_hash, score in content})
-                for url_hash, score in content:
-                    if url_hash in common_doc_set:
-                        common_docs[url_hash] = score * \
-                            log(55393 / len(content))
-                        # print(common_docs)
+                    temp = dict()
+                    for posting in content:
+                        if posting[0] in common_docs:
+                            temp[posting[0]] = common_docs[posting[0]] + posting[1]
+                    common_docs = temp
 
             top_10 = heapq.nlargest(
                 10, common_docs.items(), key=lambda x: x[1])
 
-            # print(f'TOP 10: {top_10}')
             self.print_first_10_pages(top_10)
             end_time = time.time()  # End the timer
             elapsed_time = end_time - start_time  # Calculate elapsed time
@@ -130,8 +121,8 @@ class Query:
 
     def lookup_word(self, word):
         key = word[0]
-        print(f'word {word}')
-
+        #print(f'word {word}')
+        print(word)
         start_offsets = self.offsets[word][0]
         end_offsets = self.offsets[word][1]
 
