@@ -19,7 +19,7 @@ with shelve.open(url_id) as urls:
     for key in urls.keys():
         total_links += 1
 
-#idf = log (total_links / len[term] which is # of docs containing that term)
+# idf = log (total_links / len[term] which is # of docs containing that term)
 
 files = []
 heap = []  # will use heapq to push and pop entries in
@@ -59,11 +59,11 @@ while heap:
         print("next bin")
         with open(f'bins/bin_{bin_order[current_bin]}.jsonl', 'w') as final_index:
 
-            #this is the idf part . tf was calculated in alternate_indexer
+            # this is the idf part . tf was calculated in alternate_indexer
             for key, value in current_index.items():
                 size = len(value) + 1  # size of the posting list
                 for posting in value:
-                     posting[1] *= log(total_links/size)
+                    posting[1] *= log(total_links/size)
                 value = sorted(value, key=lambda x: x[1], reverse=True)
 
                 start_offset = final_index.tell()
@@ -71,8 +71,6 @@ while heap:
                 final_index.write("\n")
                 end_offset = final_index.tell()
                 offsets[key] = (start_offset, end_offset)
-
-
 
         current_bin += 1
         current_index = dict()
@@ -89,10 +87,11 @@ while heap:
     except StopIteration:
         pass
     count += 1
+with open(f'bins/bin_{bin_order[current_bin]}.jsonl', 'w') as final_index:
+    for key, value in current_index.items():
+        start_offset = final_index.tell()
+        json.dump({key: value}, final_index)
+        final_index.write("\n")
+        end_offset = final_index.tell()
+        offsets[key] = (start_offset, end_offset)
 offsets.close()
-
-
-
-#have to the tf-idf for the z bin so figure why this is binary later
-with open(f'bins/bin_{bin_order[current_bin]}.bin', 'wb') as final_index:
-    pickle.dump(current_index, final_index)

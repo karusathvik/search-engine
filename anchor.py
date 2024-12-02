@@ -84,7 +84,7 @@ class Indexer:
                     content = Parser().parse_content(file)
                     if content:
                         url, tokens, anchor_dict, fields = content
-                        #print(f'parsing {Indexer.total_count}: {file} {url}')
+                        # print(f'parsing {Indexer.total_count}: {file} {url}')
                         if not self.similar_exist(tokens):
                             # this is used for calculating tf
                             doc_size = len(tokens)
@@ -94,6 +94,7 @@ class Indexer:
                         if self.url_count > 10000:
                             self.dump_current_index()  # dumps the current index
         self.dump_current_index()
+
     def add_posting_token(self, tokens, url_hash, doc_size, fields):
         '''just adds the token count and the hashed url <hashedurl, tf or occurences / total # terms >'''
         count = dict()
@@ -122,9 +123,11 @@ class Indexer:
 
             if key not in self.index:
                 #    print(f'SCORINGS {key}: {scorings[key]}')
-                self.index[key] = [(url_hash, scorings[key]*0.3+in_anchor+0.3*page_rank)]
+                self.index[key] = [
+                    (url_hash, scorings[key]*0.3+in_anchor+0.3*page_rank)]
             else:
-                self.index[key].append((url_hash, scorings[key]*0.3+in_anchor+0.3*page_rank))
+                self.index[key].append(
+                    (url_hash, scorings[key]*0.3+in_anchor+0.3*page_rank))
 
         # counts term frequencies for each word in the bigram
         for i in range(len(tokens) - 1):
@@ -137,7 +140,8 @@ class Indexer:
         # print(f'SCORINGS {scorings}')
         for key, value in bigram_count.items():
             split_key = key.split(' ')
-            in_anchor = 0.4 if (split_key[0] in anchor_set) and (split_key[1] in anchor_set) else 0
+            in_anchor = 0.4 if (split_key[0] in anchor_set) and (
+                split_key[1] in anchor_set) else 0
             if key not in self.index:
                 self.index[key] = [
                     (url_hash, (bigram_count[key] * (scorings[split_key[0]] + scorings[split_key[1]]) / 2)*0.3 + in_anchor + 0.3*page_rank)]
@@ -152,10 +156,11 @@ class Indexer:
         for k, tf in tf_content.items():
             weight = weighted_content.get(k, 0)
             if weight == 0:
-                weighted_tf = (1 + log(tf)) * TF_RATIO if tf > 0 else 0  # changed to multiply by TF_Ratio
+                # changed to multiply by TF_Ratio
+                weighted_tf = (1 + log(tf)) * TF_RATIO if tf > 0 else 0
             else:
                 weighted_tf = FIELD_WAIT_RATIO * (1 + log(weight)) * TF_RATIO * \
-                              (1 + log(tf)) if tf > 0 else 0
+                    (1 + log(tf)) if tf > 0 else 0
             final_token_weight[k] = weighted_tf
         return final_token_weight
 
