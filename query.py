@@ -9,7 +9,6 @@ import json
 import heapq
 from math import log
 
-#TODO: fix bigram/normal word looks up for those that do not exist
 
 class Query:
     def __init__(self):
@@ -37,11 +36,8 @@ class Query:
             else:
                 break
         end_time = time.time()
-        # print(f'time to print {end_time - start_time}')
-        # return link
 
     def get_user_input(self, query):
-        # try:
         start_time = time.time()
 
         parse_time = time.time()
@@ -83,12 +79,12 @@ class Query:
                     temp = dict()
                     for posting in content:
                         if posting[0] in common_docs:
-                            temp[posting[0]] = common_docs[posting[0]] + posting[1]
+                            temp[posting[0]] = common_docs[posting[0]] + \
+                                posting[1]
                     common_docs = temp
 
             top_10 = heapq.nlargest(
                 10, common_docs.items(), key=lambda x: x[1])
-
 
             self.print_first_10_pages(top_10)
             end_time = time.time()  # End the timer
@@ -101,43 +97,31 @@ class Query:
     def generate_bigrams(self, parsed_query):
         return tuple(zip(parsed_query, parsed_query[1:]))
 
-    # def lookup_shorter_queries(self, words):
-    #     start_time = time.time()
-    #     key = words[0]
-
-    #     start_offsets = self.offsets[words][0]
-    #     end_offsets = self.offsets[words][1]
-
-    #     bin_to_open = self.bin_dicts[key]
-    #     bin_to_open.seek(start_offsets)
-
-    #     raw_content = bin_to_open.read(end_offsets - start_offsets)
-    #     content = json.loads(raw_content)
-
-    #     end_lookup = time.time()
-    #     print(f'time to lookup : {end_lookup - start_time}')
-
-    #     return content[words]
-
     def lookup_word(self, word):
-        key = word[0]
-        #print(f'word {word}')
-        print(word)
-        start_offsets = self.offsets[word][0]
-        end_offsets = self.offsets[word][1]
+        try:
+            key = word[0]
+            # print(f'word {word}')
+            print(word)
+            start_offsets = self.offsets[word][0]
+            end_offsets = self.offsets[word][1]
 
-        bin_to_open = self.bin_dicts[key]
-        bin_to_open.seek(start_offsets)
+            bin_to_open = self.bin_dicts[key]
+            bin_to_open.seek(start_offsets)
 
-        raw_content = bin_to_open.read(end_offsets - start_offsets)
+            raw_content = bin_to_open.read(end_offsets - start_offsets)
 
-        content = json.loads(raw_content)
+            content = json.loads(raw_content)
 
-        return content[word]
+            return content[word]
+        except KeyError:
+            print("No results found")
+            exit()
 
     def close_bins(self):
         for key, file in self.bin_dicts.items():
             file.close()
+        self.offsets.close()
+        self.url_id.close()
 
 
 if __name__ == "__main__":
