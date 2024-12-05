@@ -42,22 +42,22 @@ class Indexer:
         # title, h1, h2, h3, strong
 
         # when you run your first fresh index
-        if not os.path.exists('stored_urls_path.json'):
-            self.simhash = {}  # ik not efficent for now but just stores unique simhashes
-        else:
+        #if not os.path.exists('stored_urls_path.json'):
+        self.simhash = {}  # ik not efficent for now but just stores unique simhashes
+        '''else:
             self.stored_simhash = True
             json_stored_path = open('stored_urls_path.json', 'r')
-            self.simhash = json.load(json_stored_path)  # loaded simhash
+            self.simhash = json.load(json_stored_path)  # loaded simhash'''
 
         self.url_id = shelve.open('url_id.shelve', writeback=True)
         self.fill_index_with_content(target_directory)
 
-        if self.stored_simhash:
+        '''if self.stored_simhash:
             json_stored_path.close()
         else:
             with open('stored_urls_path.json', 'w') as js:
                 json.dump(self.simhash, js)
-
+        '''
         print("saving url id")
         self.url_id.close()
 
@@ -84,17 +84,17 @@ class Indexer:
                     content = Parser().parse_content(file)
                     if content:
                         url, tokens, anchor_dict, fields = content
-                        # print(f'parsing {Indexer.total_count}: {file} {url}')
-                        if not self.similar_exist(tokens):
+                        print(f'parsing {Indexer.total_count}: {file} {url}')
+                        doc_size = len(tokens)
+                        if not self.similar_exist(tokens) and doc_size > 1:
                             # this is used for calculating tf
-                            doc_size = len(tokens)
+
                             url_hash = hashlib.sha256(url.encode()).hexdigest()
                             self.add_posting_token(
                                 tokens, url_hash, doc_size, fields)
                         if self.url_count > 10000:
                             self.dump_current_index()  # dumps the current index
         self.dump_current_index()
-
     def add_posting_token(self, tokens, url_hash, doc_size, fields):
         '''just adds the token count and the hashed url <hashedurl, tf or occurences / total # terms >'''
         count = dict()
@@ -108,7 +108,10 @@ class Indexer:
             weight = self.weights[index]
             #    print(f'field {index}')
             for token in tokens_in_field:
-                weighted[token] = weight
+                if token in weighted and weighted[token] < weight:
+                    weighted[token] = weight
+                else:
+                    weighted[token] = weight
 
         for token in tokens:
             if token not in count:
@@ -123,11 +126,9 @@ class Indexer:
 
             if key not in self.index:
                 #    print(f'SCORINGS {key}: {scorings[key]}')
-                self.index[key] = [
-                    (url_hash, scorings[key]*0.3+in_anchor+0.3*page_rank)]
+                self.index[key] = [(url_hash, scorings[key]*0.3+in_anchor+0.3*page_rank)]
             else:
-                self.index[key].append(
-                    (url_hash, scorings[key]*0.3+in_anchor+0.3*page_rank))
+                self.index[key].append((url_hash, scorings[key]*0.3+in_anchor+0.3*page_rank))
 
         # counts term frequencies for each word in the bigram
         for i in range(len(tokens) - 1):
@@ -140,14 +141,13 @@ class Indexer:
         # print(f'SCORINGS {scorings}')
         for key, value in bigram_count.items():
             split_key = key.split(' ')
-            in_anchor = 0.4 if (split_key[0] in anchor_set) and (
-                split_key[1] in anchor_set) else 0
+            in_anchor = 0.7 if (split_key[0] in anchor_set) and (split_key[1] in anchor_set) else 0
             if key not in self.index:
                 self.index[key] = [
-                    (url_hash, (bigram_count[key] * (scorings[split_key[0]] + scorings[split_key[1]]) / 2)*0.3 + in_anchor + 0.3*page_rank)]
+                    (url_hash, ( (scorings[split_key[0]] + scorings[split_key[1]]) / 2)*0.5 + in_anchor + page_rank)]
             else:
                 self.index[key].append(
-                    (url_hash, (bigram_count[key] * (scorings[split_key[0]] + scorings[split_key[1]]) / 2)*0.3 + in_anchor + 0.3*page_rank))
+                    (url_hash, ((scorings[split_key[0]] + scorings[split_key[1]]) / 2)*0.5 + in_anchor + page_rank))
 
     def calculate_some_relevance(self, weighted_content, doc_size, tf_content):
         FIELD_WAIT_RATIO = 0.6
@@ -156,11 +156,10 @@ class Indexer:
         for k, tf in tf_content.items():
             weight = weighted_content.get(k, 0)
             if weight == 0:
-                # changed to multiply by TF_Ratio
-                weighted_tf = (1 + log(tf)) * TF_RATIO if tf > 0 else 0
+                weighted_tf = (1 + log(tf))/(log(doc_size)) * TF_RATIO if tf > 0 else 0  # changed to multiply by TF_Ratio
             else:
-                weighted_tf = FIELD_WAIT_RATIO * (1 + log(weight)) * TF_RATIO * \
-                    (1 + log(tf)) if tf > 0 else 0
+                weighted_tf = FIELD_WAIT_RATIO * (1 + log(weight))/log(doc_size) + TF_RATIO * \
+                              (1 + log(tf))/log(doc_size) if tf > 0 else 0
             final_token_weight[k] = weighted_tf
         return final_token_weight
 
@@ -168,28 +167,32 @@ class Indexer:
         '''checks the simhash values and returns if a similar exits value exists or not'''
 
         try:
+
             simhash = self._get_simhash(tokens)
             sim_val = simhash.value
 
             # this is the part where we just check if this was one of the valid simhashes we encountered before
-            if self.stored_simhash:
+            '''if self.stored_simhash:
                 if str(sim_val) in self.simhash:
                     return False
                 else:
-                    return True
+                    print("similar detected")
+                    return True'''
+            if False:
+                ...
+            else:
+                if not self.simhash:
+                    self.simhash[str(sim_val)] = 0
+                    return False
+                else:
+                    for simhash_val in self.simhash:
+                        value = Simhash(int(simhash_val))
+                        if simhash.distance(value) <= 2:
+                            print("Similar detected for the above url")
+                            return True
 
-            if not self.simhash:
                 self.simhash[str(sim_val)] = 0
                 return False
-            else:
-                for simhash_val in self.simhash:
-                    value = Simhash(int(simhash_val))
-                    if simhash.distance(value) <= 2:
-                        print("Similar detected for the above url")
-                        return True
-
-            self.simhash[str(sim_val)] = 0
-            return False
         except:
             print("overflow error")
             return False
